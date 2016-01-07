@@ -25,6 +25,7 @@ struct Nodes{
 	struct Node *nodes;
 	int realNum;
 	int nodeDataLen;
+    struct Leaf *leafs;
 };
 
 struct Node{
@@ -44,12 +45,13 @@ void initNode(struct Node *node, int nodeDataLen)
 	node->nodeDataLen = nodeDataLen;
 }
 
-void initNodes(struct Nodes *nodes, int realNum, int nodeDataLen)
+void initNodes(struct Nodes *nodes, struct Leaf *leafs, int realNum, int nodeDataLen)
 {
 	nodes = (struct Nodes*)malloc(sizeof(struct Nodes));
 	nodes->realNum = realNum;
 	nodes->nodeDataLen = nodeDataLen;
 	nodes->nodes = (struct Node*)malloc(sizeof(struct Node)*realNum);
+    nodes->leafs=leafs;
 	for (int i = 0; i < realNum; i++) initNode(&nodes->nodes[i], nodeDataLen);
 }
 
@@ -86,35 +88,94 @@ void outQueue(float *data, int len, struct Node *node)
 		data[i] = outQueue(node);
 }
 
+float getHead(struct Node *node){
+    return node->nodes[node->head];
+}
+
 int checkIfReady(struct Node *node,int nodeDataLen)
 {
 	return getNodeLen(node, nodeDataLen) > (int)nodeDataLen/2 ? 1 : 0;
 }
 
-//merge sons' data to node
+//merge sons' data to node, these 2 sons are ready
 void mergeNode(int nodeId, struct Nodes *nodes)
 {
 	//merge opt
+    Node *node=&nodes->nodes[nodeId];
 	Node *son1 = &nodes->nodes[nodeId * 2];
 	Node *son2 = &nodes->nodes[nodeId * 2+1];
 	int nowlen = 0, limit = nodes->nodeDataLen / 2;
 	float *tempF = (float*)_mm_malloc(sizeof(float)*SIMDWIDTH, WORDLENGTH);
 	float *v1 = (float*)_mm_malloc(sizeof(float)*SIMDWIDTH, WORDLENGTH);
 	float *v2 = (float*)_mm_malloc(sizeof(float)*SIMDWIDTH, WORDLENGTH);
-	while (nowlen < limit){
-		outQueue(v1, SIMDWIDTH, son1);
-		outQueue(v2, SIMDWIDTH, son2);
-		__m128 m1 = _mm_load_ps(v1);
-		__m128 m2 = _mm_load_ps(v2);
-		bitonicSort(&m1, &m2);
-		_mm_store_ps(tempF, m1);
-		enQueue()
+	
+    outQueue(v1, SIMDWIDTH, son1);
+    outQueue(v2, SIMDWIDTH, son2);
+    __m128 m1 = _mm_load_ps(v1);
+    __m128 m2 = _mm_load_ps(v2);
+    bitonicSort(&m1, &m2);
+    _mm_store_ps(tempF, m1);
+    m1=m2;
+    enQueue(tempF,SIMDWIDTH,node);
+    while (nowlen<limit) {
+        if(getHead(son1)<=getHead(son2)){
+            outQueue(v2, SIMDWIDTH, son1);
+            m2=_mm_load_ps(v2);
+        }else{
+            outQueue(v2, SIMDWIDTH, son2);
+            m2=_mm_load_ps(v2);
+        }
+        bitonicSort(&m1, &m2);
+        _mm_store_ps(tempF, m1);
+        m1=m2;
+        if(nodes->nodeDataLen-nowlen<SIMDWIDTH){
+            enQueue(tempF,nodes->nodeDataLen-nowlen,node);
+        }else{
+            enQueue(tempF,SIMDWIDTH,node);
+        }
+        nowlen+=SIMDWIDTH;
+    }
 
+}
 
-
-
-	}
-
+void mergeLeaf(int nodeId,int leafId,struct Nodes *nodes){
+    Node *node=&nodes->nodes[nodeId];
+    Leaf *leaf1 = &nodes->leafs[leafId];
+    Leaf *leaf2 = &nodes->leafs[leafId+1];
+    int nowlen = 0, limit = nodes->nodeDataLen / 2;
+    float *tempF = (float*)_mm_malloc(sizeof(float)*SIMDWIDTH, WORDLENGTH);
+    float *v1 = (float*)_mm_malloc(sizeof(float)*SIMDWIDTH, WORDLENGTH);
+    float *v2 = (float*)_mm_malloc(sizeof(float)*SIMDWIDTH, WORDLENGTH);
+    //outQueue(v1, SIMDWIDTH, son1);
+    //outQueue(v2, SIMDWIDTH, son2);
+    memcpy(v1,&leaf1->sortedData[pos],)
+    
+    
+    __m128 m1 = _mm_load_ps(v1);
+    __m128 m2 = _mm_load_ps(v2);
+    bitonicSort(&m1, &m2);
+    _mm_store_ps(tempF, m1);
+    m1=m2;
+    //enQueue(tempF,SIMDWIDTH,node);
+    while (nowlen<limit) {
+        if(){
+            outQueue(v2, SIMDWIDTH, son1);
+            m2=_mm_load_ps(v2);
+        }else{
+            outQueue(v2, SIMDWIDTH, son2);
+            m2=_mm_load_ps(v2);
+        }
+        bitonicSort(&m1, &m2);
+        _mm_store_ps(tempF, m1);
+        m1=m2;
+        if(nodes->nodeDataLen-nowlen<SIMDWIDTH){
+            //enQueue(tempF,nodes->nodeDataLen-nowlen,node);
+        }else{
+            //enQueue(tempF,SIMDWIDTH,node);
+        }
+        nowlen+=SIMDWIDTH;
+    }
+    
 }
 
 void fetch2Ready(int nodeId,struct Nodes *nodes)
@@ -129,7 +190,9 @@ void fetch2Ready(int nodeId,struct Nodes *nodes)
 		mergeNode(nodeId, nodes);
 	}else{
 		//fetch data from L
-
+        int leafId=sonId-nodes->realNum-2;//from zeros
+        struct Leaf *leaf1=&nodes->leafs[leafId],*leaf2=&nodes->leafs[leafId+1];
+        
 	}
 
 
